@@ -283,7 +283,7 @@ func (s *service) ExportInvoiceMerged(
 		Body:        body,
 		ContentType: modulexlsx.ContentType(),
 		Filename: fmt.Sprintf(
-			"gdt-%s-%s-merged-%s_%s.xlsx",
+			"hddtgdt-%s-%s-merged-%s_%s.xlsx",
 			channel,
 			direction,
 			req.FromDate,
@@ -366,7 +366,7 @@ func buildExportChunksZip(
 		Body:        buffer.Bytes(),
 		ContentType: zipContentType,
 		Filename: fmt.Sprintf(
-			"gdt-%s-%s-chunks-%s_%s.zip",
+			"hddtgdt-%s-%s-chunks-%s_%s.zip",
 			channel,
 			direction,
 			fromDate,
@@ -382,7 +382,7 @@ func exportChunkFilename(
 	to time.Time,
 ) string {
 	return fmt.Sprintf(
-		"gdt-%s-%s-%s_%s.xlsx",
+		"hddtgdt-%s-%s-%s_%s.xlsx",
 		channel,
 		direction,
 		moduleutils.FormatInputDate(from),
