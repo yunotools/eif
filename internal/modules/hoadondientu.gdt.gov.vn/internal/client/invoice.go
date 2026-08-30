@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strconv"
 
@@ -51,6 +52,16 @@ func (c *hddtgdtClient) QueryInvoices(
 	if err != nil {
 		return nil, err
 	}
+
+	slog.Info(
+		"HDDT GDT invoice request",
+		"method", "GET",
+		"url", requestURL,
+		"params", params,
+		"body", nil,
+		"channel", channel,
+		"direction", direction,
+	)
 
 	var response model.InvoiceQueryResult
 	if err := c.httpClient.GetJSON(

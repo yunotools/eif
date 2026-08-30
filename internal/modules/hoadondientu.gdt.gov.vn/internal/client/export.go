@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/url"
 
 	corehttp "github.com/yunotools/eif/internal/core/protocol/httpclient"
@@ -51,6 +52,16 @@ func (c *hddtgdtClient) ExportInvoices(
 	if err != nil {
 		return nil, err
 	}
+
+	slog.Info(
+		"HDDT GDT export request",
+		"method", "GET",
+		"url", requestURL,
+		"params", params,
+		"body", nil,
+		"channel", channel,
+		"direction", direction,
+	)
 
 	response, err := c.httpClient.GetBytes(
 		ctx,
