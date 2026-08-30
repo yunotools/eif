@@ -25,10 +25,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	log := logger.Init(cfg.LoggerConfig.Level, cfg.LoggerConfig.Format)
+	log := logger.Init(
+		cfg.LoggerConfig.Level,
+		cfg.LoggerConfig.Format,
+	)
 
 	httpClient := corehttp.New(cfg.HDDTGDTConfig.Timeout)
-	hddtModule := hddtgdt.New(httpClient, cfg.HDDTGDTConfig)
+	hddtModule, err := hddtgdt.New(httpClient, cfg.HDDTGDTConfig)
+	if err != nil {
+		log.Error(
+			"initialize HDDT GDT module",
+			"error",
+			err,
+		)
+		os.Exit(1)
+	}
 
 	registrars := []coremodule.Registrar{hddtModule}
 	engine := router.New(cfg, registrars...)
@@ -48,26 +59,40 @@ func main() {
 		close(serverErr)
 	}()
 
-	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	sigCtx, stop := signal.NotifyContext(
+		context.Background(),
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
 	defer stop()
 
 	select {
 	case err := <-serverErr:
 		if err != nil {
-			log.Error("server stopped unexpectedly", "error", err)
+			log.Error(
+				"server stopped unexpectedly",
+				"error",
+				err,
+			)
 			os.Exit(1)
 		}
 	case <-sigCtx.Done():
 		log.Info("shutdown signal received")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.ServerConfig.ShutdownTimeout)
+	ctx, cancel := context.WithTimeout(
+		context.Background(),
+		cfg.ServerConfig.ShutdownTimeout,
+	)
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
-		log.Error("graceful shutdown failed", "error", err)
+		log.Error(
+			"graceful shutdown failed",
+			"error",
+			err,
+		)
 	}
 
-	// Give structured logger handlers a small opportunity to flush when stdout is piped.
 	time.Sleep(10 * time.Millisecond)
 }

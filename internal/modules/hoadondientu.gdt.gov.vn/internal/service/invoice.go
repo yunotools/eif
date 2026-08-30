@@ -126,7 +126,11 @@ func (s *service) queryInvoices(
 		to,
 		s.maxQueryDays,
 	)
-	merged := &model.InvoiceQueryResult{}
+	merged := &model.InvoiceQueryResult{
+		FromDate:     query.FromDate,
+		ToDate:       query.ToDate,
+		FailedRanges: make([]model.InvoiceQueryFailedRange, 0),
+	}
 	successfulRequests := 0
 	failedRequests := 0
 	var lastErr error
@@ -145,6 +149,14 @@ func (s *service) queryInvoices(
 		if err != nil {
 			failedRequests++
 			lastErr = err
+
+			merged.FailedRanges = append(
+				merged.FailedRanges,
+				model.InvoiceQueryFailedRange{
+					FromDate: moduleutils.FormatInputDate(dateRange.From),
+					ToDate:   moduleutils.FormatInputDate(dateRange.To),
+				},
+			)
 
 			slog.Error(
 				"HDDT GDT invoice request failed",

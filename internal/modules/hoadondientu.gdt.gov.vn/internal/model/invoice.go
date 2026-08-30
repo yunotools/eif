@@ -44,11 +44,19 @@ type ExportOptions struct {
 	Filter InvoiceFilter
 }
 
+type InvoiceQueryFailedRange struct {
+	FromDate string `json:"from_date"`
+	ToDate   string `json:"to_date"`
+}
+
 type InvoiceQueryResult struct {
-	Datas []json.RawMessage `json:"datas"`
-	Total int               `json:"total"`
-	State any               `json:"state"`
-	Time  int               `json:"time"`
+	FromDate     string                    `json:"from_date"`
+	ToDate       string                    `json:"to_date"`
+	FailedRanges []InvoiceQueryFailedRange `json:"failed_ranges"`
+	Datas        []json.RawMessage         `json:"datas"`
+	Total        int                       `json:"total"`
+	State        any                       `json:"state"`
+	Time         int                       `json:"time"`
 }
 
 type File struct {

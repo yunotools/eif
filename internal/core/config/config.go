@@ -34,11 +34,13 @@ type CORSConfig struct {
 }
 
 type HDDTGDTConfig struct {
-	Endpoint      string
-	Timeout       time.Duration
-	MaxQueryDays  int
-	MaxExportDays int
-	SessionSkew   time.Duration
+	Endpoint             string
+	Timeout              time.Duration
+	MaxQueryDays         int
+	MaxExportDays        int
+	SessionSkew          time.Duration
+	SessionStorePath     string
+	SessionEncryptionKey []byte
 }
 
 func (c HDDTGDTConfig) Validate() error {
@@ -54,6 +56,15 @@ func (c HDDTGDTConfig) Validate() error {
 
 	if c.MaxExportDays <= 0 {
 		return fmt.Errorf("EIF_HDDT_GDT_MAX_EXPORT_DAYS must be > 0")
+	}
+
+	if c.SessionStorePath == "" {
+		return fmt.Errorf("EIF_SESSION_STORE_PATH is required")
+	}
+
+	// AES-256 yêu cầu key đúng 32 bytes.
+	if len(c.SessionEncryptionKey) != 32 {
+		return fmt.Errorf("EIF_SESSION_ENCRYPTION_KEY must decode to exactly 32 bytes")
 	}
 
 	return nil

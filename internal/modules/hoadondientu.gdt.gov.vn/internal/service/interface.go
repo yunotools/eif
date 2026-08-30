@@ -21,7 +21,7 @@ type Service interface {
 		error,
 	)
 
-	DeleteSession(sessionID string)
+	DeleteSession(sessionID string) error
 
 	QueryInvoiceSold(
 		ctx context.Context,

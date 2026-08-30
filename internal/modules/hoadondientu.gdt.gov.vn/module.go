@@ -1,6 +1,8 @@
 package hddtgdt
 
 import (
+	"log/slog"
+
 	"github.com/gin-gonic/gin"
 	"github.com/yunotools/eif/internal/core/config"
 	corehttp "github.com/yunotools/eif/internal/core/protocol/httpclient"
@@ -14,13 +16,33 @@ type Module struct {
 	handler *handler.Handler
 }
 
-func New(httpClient *corehttp.Client, cfg config.HDDTGDTConfig) *Module {
+func New(
+	httpClient *corehttp.Client,
+	cfg config.HDDTGDTConfig,
+) (
+	*Module,
+	error,
+) {
 	upstreamClient := client.New(httpClient, cfg.Endpoint)
-	sessionManager := session.NewManager(cfg.SessionSkew)
+	sessionManager, err := session.NewManager(
+		cfg.SessionSkew,
+		cfg.SessionStorePath,
+		cfg.SessionEncryptionKey,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	slog.Info(
+		"HDDT GDT session store loaded",
+		"sessions", sessionManager.Count(),
+		"store_path", cfg.SessionStorePath,
+	)
+
 	svc := service.New(upstreamClient, sessionManager, cfg.MaxQueryDays, cfg.MaxExportDays)
 	return &Module{
 		handler: handler.New(svc),
-	}
+	}, nil
 }
 
 func (m *Module) RegisterRoutes(api *gin.RouterGroup) {

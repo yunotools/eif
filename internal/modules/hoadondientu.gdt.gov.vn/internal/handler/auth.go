@@ -32,6 +32,9 @@ func (h *Handler) Authenticate(c *gin.Context) {
 }
 
 func (h *Handler) DeleteSession(c *gin.Context) {
-	h.service.DeleteSession(sessionID(c))
+	if err := h.service.DeleteSession(sessionID(c)); err != nil {
+		writeError(c, err)
+		return
+	}
 	c.Status(http.StatusNoContent)
 }

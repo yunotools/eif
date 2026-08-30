@@ -71,7 +71,7 @@ func CalculateInclusiveDays(from, to time.Time) int {
 }
 
 func SplitDateRangeDescending(from, to time.Time, maxDays int) []DateRange {
-	if maxDays <= 0 || CalculateInclusiveDays(from, to) <= maxDays {
+	if maxDays <= 0 {
 		return []DateRange{{
 			From: from,
 			To:   to,
@@ -97,12 +97,25 @@ func SplitDateRangeDescending(from, to time.Time, maxDays int) []DateRange {
 	)
 
 	// Loop từ ngày mới nhất về ngày cũ
+	// HDDT GDT giới hạn khoảng tìm kiếm không được lớn hơn 1 tháng.
+	// Không chỉ giới hạn theo số ngày vì tháng 2 có ít ngày hơn.
+	// Vì vậy mỗi chunk không được vượt qua ranh giới tháng lịch.
 	for !endDay.Before(fromDay) {
 		start := time.Date(
 			endDay.Year(), endDay.Month(), endDay.Day(),
 			0, 0, 0, 0,
 			endDay.Location(),
 		).AddDate(0, 0, -(maxDays - 1))
+
+		monthStart := time.Date(
+			endDay.Year(), endDay.Month(), 1,
+			0, 0, 0, 0,
+			endDay.Location(),
+		)
+
+		if start.Before(monthStart) {
+			start = monthStart
+		}
 
 		if start.Before(fromDay) {
 			start = fromDay
@@ -120,4 +133,8 @@ func SplitDateRangeDescending(from, to time.Time, maxDays int) []DateRange {
 
 func FormatHDDTGDTDate(t time.Time) string {
 	return t.Format(hddtgdtDateLayout)
+}
+
+func FormatInputDate(t time.Time) string {
+	return t.Format(inputDateLayout)
 }

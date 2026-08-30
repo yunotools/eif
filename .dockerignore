@@ -12,3 +12,4 @@ out
 *.log
 coverage.out
 coverage.html
+runtime

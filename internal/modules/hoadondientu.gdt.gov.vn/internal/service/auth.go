@@ -72,6 +72,7 @@ func (s *service) Authenticate(
 	}
 
 	created, err := s.sessions.Create(
+		req.Username,
 		response.Token,
 		expiredAt,
 	)
@@ -88,8 +89,17 @@ func (s *service) Authenticate(
 	}, nil
 }
 
-func (s *service) DeleteSession(sessionID string) {
-	if sessionID != "" {
-		s.sessions.Delete(sessionID)
+func (s *service) DeleteSession(sessionID string) error {
+	if sessionID == "" {
+		return nil
 	}
+
+	if err := s.sessions.Delete(sessionID); err != nil {
+		return apperr.New(
+			apperr.CodeInternalError,
+			err,
+		)
+	}
+
+	return nil
 }

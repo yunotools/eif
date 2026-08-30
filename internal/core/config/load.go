@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"strconv"
@@ -14,12 +15,17 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
-	maxQueryDays, err := envInt("EIF_HDDT_GDT_MAX_QUERY_DAYS", 30)
+	maxQueryDays, err := envInt("EIF_HDDT_GDT_MAX_QUERY_DAYS", 31)
 	if err != nil {
 		return nil, err
 	}
 
-	maxExportDays, err := envInt("EIF_HDDT_GDT_MAX_EXPORT_DAYS", 30)
+	maxExportDays, err := envInt("EIF_HDDT_GDT_MAX_EXPORT_DAYS", 31)
+	if err != nil {
+		return nil, err
+	}
+
+	sessionEncryptionKey, err := envBase64Bytes("EIF_SESSION_ENCRYPTION_KEY", 32)
 	if err != nil {
 		return nil, err
 	}
@@ -42,11 +48,13 @@ func Load() (*Config, error) {
 		},
 
 		HDDTGDTConfig: HDDTGDTConfig{
-			Endpoint:      strings.TrimRight(envString("EIF_HDDT_GDT_ENDPOINT", "https://hoadondientu.gdt.gov.vn"), "/"),
-			Timeout:       envDuration("EIF_HDDT_GDT_TIMEOUT", 60*time.Second),
-			MaxQueryDays:  maxQueryDays,
-			MaxExportDays: maxExportDays,
-			SessionSkew:   envDuration("EIF_SESSION_EXPIRY_SKEW", 30*time.Second),
+			Endpoint:             strings.TrimRight(envString("EIF_HDDT_GDT_ENDPOINT", "https://hoadondientu.gdt.gov.vn"), "/"),
+			Timeout:              envDuration("EIF_HDDT_GDT_TIMEOUT", 60*time.Second),
+			MaxQueryDays:         maxQueryDays,
+			MaxExportDays:        maxExportDays,
+			SessionSkew:          envDuration("EIF_SESSION_EXPIRY_SKEW", 30*time.Second),
+			SessionStorePath:     envString("EIF_SESSION_STORE_PATH", "./runtime/hddtgdt-sessions.enc"),
+			SessionEncryptionKey: sessionEncryptionKey,
 		},
 	}
 
@@ -107,4 +115,39 @@ func envCSV(key string, fallback []string) []string {
 	}
 
 	return out
+}
+
+func envBase64Bytes(
+	key string,
+	expectedBytes int,
+) (
+	[]byte,
+	error,
+) {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return nil, fmt.Errorf("%s is required", key)
+	}
+
+	data, err := base64.StdEncoding.DecodeString(value)
+	if err != nil {
+		data, err = base64.RawStdEncoding.DecodeString(value)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"%s must be base64 encoded: %w",
+				key,
+				err,
+			)
+		}
+	}
+
+	if len(data) != expectedBytes {
+		return nil, fmt.Errorf(
+			"%s must decode to exactly %d bytes",
+			key,
+			expectedBytes,
+		)
+	}
+
+	return data, nil
 }
