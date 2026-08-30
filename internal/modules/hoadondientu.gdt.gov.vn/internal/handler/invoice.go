@@ -1,0 +1,41 @@
+package handler
+
+import (
+	"context"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+	"github.com/yunotools/eif/internal/core/apperr"
+	"github.com/yunotools/eif/internal/modules/hoadondientu.gdt.gov.vn/internal/dto"
+	"github.com/yunotools/eif/internal/modules/hoadondientu.gdt.gov.vn/internal/model"
+)
+
+func (h *Handler) QueryInvoiceSold(c *gin.Context) {
+	h.query(c, h.service.QueryInvoiceSold)
+}
+
+func (h *Handler) QueryInvoicePurchase(c *gin.Context) {
+	h.query(c, h.service.QueryInvoicePurchase)
+}
+
+func (h *Handler) QueryScoInvoiceSold(c *gin.Context) {
+	h.query(c, h.service.QueryScoInvoiceSold)
+}
+
+func (h *Handler) QueryScoInvoicePurchase(c *gin.Context) {
+	h.query(c, h.service.QueryScoInvoicePurchase)
+}
+
+func (h *Handler) query(c *gin.Context, fn func(context.Context, string, *dto.HoaDonQuery) (*model.InvoiceQueryResult, error)) {
+	var req dto.HoaDonQuery
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, apperr.New(apperr.CodeInvalidRequest, err))
+		return
+	}
+	result, err := fn(c.Request.Context(), sessionID(c), &req)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
