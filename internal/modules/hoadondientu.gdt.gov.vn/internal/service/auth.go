@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"time"
 
 	"github.com/yunotools/eif/internal/core/apperr"
 	"github.com/yunotools/eif/internal/modules/hoadondientu.gdt.gov.vn/internal/dto"
@@ -86,6 +87,35 @@ func (s *service) Authenticate(
 	return &dto.AuthenticationResponse{
 		SessionID: created.ID,
 		ExpiredAt: created.ExpiredAt,
+	}, nil
+}
+
+func (s *service) GetSession(sessionID string) (
+	*dto.SessionResponse,
+	error,
+) {
+	sess, err := s.sessions.Get(sessionID)
+	if err != nil {
+		return nil, apperr.New(
+			apperr.CodeSessionExpired,
+			err,
+		)
+	}
+
+	remaining := time.Until(sess.ExpiredAt)
+	remainingSeconds := int64(0)
+	if remaining > 0 {
+		// Làm tròn lên để vừa nhận response không bị hụt 1 giây do phần nano.
+		remainingSeconds = int64(
+			(remaining + time.Second - 1) / time.Second,
+		)
+	}
+
+	return &dto.SessionResponse{
+		SessionID:        sess.ID,
+		Username:         sess.Username,
+		ExpiredAt:        sess.ExpiredAt,
+		RemainingSeconds: remainingSeconds,
 	}, nil
 }
 

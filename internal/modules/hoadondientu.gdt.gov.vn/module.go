@@ -49,6 +49,7 @@ func (m *Module) RegisterRoutes(api *gin.RouterGroup) {
 	group := api.Group("/module/hoadondientu.gdt.gov.vn")
 	group.GET("/captcha", m.handler.GetCaptcha)
 	group.POST("/authenticate", m.handler.Authenticate)
+	group.GET("/session", m.handler.GetSession)
 	group.DELETE("/session", m.handler.DeleteSession)
 
 	group.POST("/invoice/sold", m.handler.QueryInvoiceSold)

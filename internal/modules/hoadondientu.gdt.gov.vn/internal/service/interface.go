@@ -21,6 +21,11 @@ type Service interface {
 		error,
 	)
 
+	GetSession(sessionID string) (
+		*dto.SessionResponse,
+		error,
+	)
+
 	DeleteSession(sessionID string) error
 
 	QueryInvoiceSold(

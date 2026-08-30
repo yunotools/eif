@@ -34,6 +34,16 @@ func (h *Handler) Authenticate(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
+func (h *Handler) GetSession(c *gin.Context) {
+	result, err := h.service.GetSession(sessionID(c))
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
 func (h *Handler) DeleteSession(c *gin.Context) {
 	if err := h.service.DeleteSession(sessionID(c)); err != nil {
 		writeError(c, err)
