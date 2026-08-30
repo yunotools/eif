@@ -67,4 +67,13 @@ type Service interface {
 		*model.File,
 		error,
 	)
+
+	ExportInvoiceMerged(
+		ctx context.Context,
+		sessionID string,
+		req *dto.ExportInvoiceMergedRequest,
+	) (
+		*model.File,
+		error,
+	)
 }

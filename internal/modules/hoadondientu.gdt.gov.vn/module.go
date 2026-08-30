@@ -56,4 +56,5 @@ func (m *Module) RegisterRoutes(api *gin.RouterGroup) {
 	group.POST("/invoice/sco/sold", m.handler.QueryScoInvoiceSold)
 	group.POST("/invoice/sco/purchase", m.handler.QueryScoInvoicePurchase)
 	group.POST("/invoice/export", m.handler.ExportInvoice)
+	group.POST("/invoice/export/merged", m.handler.ExportInvoiceMerged)
 }

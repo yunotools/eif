@@ -14,6 +14,7 @@ func (h *Handler) GetCaptcha(c *gin.Context) {
 		writeError(c, err)
 		return
 	}
+
 	c.JSON(http.StatusOK, result)
 }
 
@@ -23,11 +24,13 @@ func (h *Handler) Authenticate(c *gin.Context) {
 		writeError(c, apperr.New(apperr.CodeInvalidRequest, err))
 		return
 	}
+
 	result, err := h.service.Authenticate(c.Request.Context(), &req)
 	if err != nil {
 		writeError(c, err)
 		return
 	}
+
 	c.JSON(http.StatusOK, result)
 }
 
@@ -36,5 +39,6 @@ func (h *Handler) DeleteSession(c *gin.Context) {
 		writeError(c, err)
 		return
 	}
+
 	c.Status(http.StatusNoContent)
 }
