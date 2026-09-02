@@ -50,6 +50,7 @@ func (m *Module) RegisterRoutes(api *gin.RouterGroup) {
 	group.GET("/captcha", m.handler.GetCaptcha)
 	group.POST("/authenticate", m.handler.Authenticate)
 	group.GET("/session", m.handler.GetSession)
+	group.POST("/session/refresh", m.handler.RefreshSession)
 	group.DELETE("/session", m.handler.DeleteSession)
 
 	group.POST("/invoice/sold", m.handler.QueryInvoiceSold)

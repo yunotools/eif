@@ -44,6 +44,26 @@ func (h *Handler) GetSession(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
+func (h *Handler) RefreshSession(c *gin.Context) {
+	var req dto.SessionRefreshRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, apperr.New(apperr.CodeInvalidRequest, err))
+		return
+	}
+
+	result, err := h.service.RefreshSession(
+		c.Request.Context(),
+		sessionID(c),
+		&req,
+	)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
 func (h *Handler) DeleteSession(c *gin.Context) {
 	if err := h.service.DeleteSession(sessionID(c)); err != nil {
 		writeError(c, err)

@@ -39,6 +39,12 @@ var (
 		Message:    "HDDT GDT authentication failed",
 	}
 
+	CodeHDDTGDTRefreshFailed = ErrorCode{
+		Code:       "EIF-HDDT-GDT-REFRESH-401",
+		StatusCode: http.StatusUnauthorized,
+		Message:    "HDDT GDT session refresh failed",
+	}
+
 	CodeHDDTGDTTimeout = ErrorCode{
 		Code:       "EIF-HDDT-GDT-504",
 		StatusCode: http.StatusGatewayTimeout,

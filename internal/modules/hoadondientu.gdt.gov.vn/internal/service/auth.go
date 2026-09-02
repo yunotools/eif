@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"net"
+	"net/http"
 	"time"
 
 	"github.com/yunotools/eif/internal/core/apperr"
+	corehttp "github.com/yunotools/eif/internal/core/protocol/httpclient"
 	"github.com/yunotools/eif/internal/modules/hoadondientu.gdt.gov.vn/internal/dto"
 	"github.com/yunotools/eif/internal/modules/hoadondientu.gdt.gov.vn/internal/session"
 )
@@ -45,36 +47,17 @@ func (s *service) Authenticate(
 
 	response, err := s.client.Authenticate(ctx, req)
 	if err != nil {
-		var netErr net.Error
-		if errors.As(err, &netErr) && netErr.Timeout() {
-			return nil, apperr.New(
-				apperr.CodeHDDTGDTTimeout,
-				err,
-			)
-		}
-		return nil, apperr.New(
-			apperr.CodeHDDTGDTAuthenticationFailed,
-			err,
-		)
-	}
-	if response == nil || response.Token == "" {
-		return nil, apperr.New(
-			apperr.CodeHDDTGDTInvalidResponse,
-			errors.New("authenticate response does not contain token"),
-		)
+		return nil, mapAuthenticationError(err, false)
 	}
 
-	expiredAt, err := session.ParseJWTExpiry(response.Token)
+	token, expiredAt, err := authenticationToken(response)
 	if err != nil {
-		return nil, apperr.New(
-			apperr.CodeHDDTGDTInvalidResponse,
-			err,
-		)
+		return nil, err
 	}
 
 	created, err := s.sessions.Create(
 		req.Username,
-		response.Token,
+		token,
 		expiredAt,
 	)
 	if err != nil {
@@ -102,21 +85,63 @@ func (s *service) GetSession(sessionID string) (
 		)
 	}
 
-	remaining := time.Until(sess.ExpiredAt)
-	remainingSeconds := int64(0)
-	if remaining > 0 {
-		// Làm tròn lên để vừa nhận response không bị hụt 1 giây do phần nano.
-		remainingSeconds = int64(
-			(remaining + time.Second - 1) / time.Second,
+	return sessionResponse(sess), nil
+}
+
+func (s *service) RefreshSession(
+	ctx context.Context,
+	sessionID string,
+	req *dto.SessionRefreshRequest,
+) (
+	*dto.SessionResponse,
+	error,
+) {
+	if req == nil ||
+		req.Password == "" ||
+		req.CValue == "" ||
+		req.CKey == "" {
+		return nil, apperr.New(
+			apperr.CodeInvalidRequest,
+			errors.New("password, cvalue and ckey are required"),
 		)
 	}
 
-	return &dto.SessionResponse{
-		SessionID:        sess.ID,
-		Username:         sess.Username,
-		ExpiredAt:        sess.ExpiredAt,
-		RemainingSeconds: remainingSeconds,
-	}, nil
+	current, err := s.sessions.Get(sessionID)
+	if err != nil {
+		return nil, apperr.New(
+			apperr.CodeSessionExpired,
+			err,
+		)
+	}
+
+	response, err := s.client.Authenticate(ctx, &dto.AuthenticationRequest{
+		Username: current.Username,
+		Password: req.Password,
+		CValue:   req.CValue,
+		CKey:     req.CKey,
+	})
+	if err != nil {
+		return nil, mapAuthenticationError(err, true)
+	}
+
+	token, expiredAt, err := authenticationToken(response)
+	if err != nil {
+		return nil, err
+	}
+
+	refreshed, err := s.sessions.Refresh(
+		current.ID,
+		token,
+		expiredAt,
+	)
+	if err != nil {
+		if errors.Is(err, session.ErrNotFound) || errors.Is(err, session.ErrExpired) {
+			return nil, apperr.New(apperr.CodeSessionExpired, err)
+		}
+		return nil, apperr.New(apperr.CodeInternalError, err)
+	}
+
+	return sessionResponse(refreshed), nil
 }
 
 func (s *service) DeleteSession(sessionID string) error {
@@ -132,4 +157,75 @@ func (s *service) DeleteSession(sessionID string) error {
 	}
 
 	return nil
+}
+
+func authenticationToken(
+	response *dto.AuthenticationTokenResponse,
+) (
+	string,
+	time.Time,
+	error,
+) {
+	if response == nil || response.Token == "" {
+		return "", time.Time{}, apperr.New(
+			apperr.CodeHDDTGDTInvalidResponse,
+			errors.New("authenticate response does not contain token"),
+		)
+	}
+
+	expiredAt, err := session.ParseJWTExpiry(response.Token)
+	if err != nil {
+		return "", time.Time{}, apperr.New(
+			apperr.CodeHDDTGDTInvalidResponse,
+			err,
+		)
+	}
+
+	return response.Token, expiredAt, nil
+}
+
+func sessionResponse(sess *session.Session) *dto.SessionResponse {
+	remaining := time.Until(sess.ExpiredAt)
+	remainingSeconds := int64(0)
+	if remaining > 0 {
+		remainingSeconds = int64(
+			(remaining + time.Second - 1) / time.Second,
+		)
+	}
+
+	return &dto.SessionResponse{
+		SessionID:        sess.ID,
+		Username:         sess.Username,
+		ExpiredAt:        sess.ExpiredAt,
+		RemainingSeconds: remainingSeconds,
+	}
+}
+
+func mapAuthenticationError(err error, refreshing bool) error {
+	if err == nil {
+		return nil
+	}
+
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		if netErr.Timeout() {
+			return apperr.New(apperr.CodeHDDTGDTTimeout, err)
+		}
+		return apperr.New(apperr.CodeHDDTGDTBadGateway, err)
+	}
+
+	var httpErr *corehttp.HTTPError
+	if errors.As(err, &httpErr) {
+		if httpErr.StatusCode == http.StatusBadRequest ||
+			httpErr.StatusCode == http.StatusUnauthorized ||
+			httpErr.StatusCode == http.StatusForbidden {
+			if refreshing {
+				return apperr.New(apperr.CodeHDDTGDTRefreshFailed, err)
+			}
+			return apperr.New(apperr.CodeHDDTGDTAuthenticationFailed, err)
+		}
+		return apperr.New(apperr.CodeHDDTGDTBadGateway, err)
+	}
+
+	return apperr.New(apperr.CodeHDDTGDTInvalidResponse, err)
 }

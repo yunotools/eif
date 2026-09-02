@@ -137,6 +137,42 @@ func (m *Manager) Create(
 	return &sessClone, nil
 }
 
+func (m *Manager) Refresh(
+	id string,
+	token string,
+	expiredAt time.Time,
+) (*Session, error) {
+	if id == "" {
+		return nil, ErrNotFound
+	}
+	if token == "" {
+		return nil, errors.New("session token is required")
+	}
+	if time.Now().Add(m.skew).After(expiredAt) {
+		return nil, ErrExpired
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	sess, ok := m.items[id]
+	if !ok {
+		return nil, ErrNotFound
+	}
+
+	previous := *sess
+	sess.Token = token
+	sess.ExpiredAt = expiredAt
+
+	if err := m.persistLocked(); err != nil {
+		*sess = previous
+		return nil, err
+	}
+
+	clone := *sess
+	return &clone, nil
+}
+
 func (m *Manager) Get(id string) (*Session, error) {
 	if id == "" {
 		return nil, ErrNotFound

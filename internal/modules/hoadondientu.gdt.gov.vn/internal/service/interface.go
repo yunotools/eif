@@ -26,6 +26,15 @@ type Service interface {
 		error,
 	)
 
+	RefreshSession(
+		ctx context.Context,
+		sessionID string,
+		req *dto.SessionRefreshRequest,
+	) (
+		*dto.SessionResponse,
+		error,
+	)
+
 	DeleteSession(sessionID string) error
 
 	QueryInvoiceSold(

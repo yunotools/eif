@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 
 	"github.com/yunotools/eif/internal/core/apperr"
@@ -130,6 +131,7 @@ func (s *service) queryInvoices(
 		FromDate:     query.FromDate,
 		ToDate:       query.ToDate,
 		FailedRanges: make([]model.InvoiceQueryFailedRange, 0),
+		Datas:        make([]json.RawMessage, 0),
 	}
 	successfulRequests := 0
 	failedRequests := 0

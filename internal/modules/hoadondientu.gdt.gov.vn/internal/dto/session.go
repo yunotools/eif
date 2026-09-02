@@ -8,3 +8,9 @@ type SessionResponse struct {
 	ExpiredAt        time.Time `json:"expired_at"`
 	RemainingSeconds int64     `json:"remaining_seconds"`
 }
+
+type SessionRefreshRequest struct {
+	Password string `json:"password"`
+	CValue   string `json:"cvalue"`
+	CKey     string `json:"ckey"`
+}
