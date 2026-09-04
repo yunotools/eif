@@ -38,6 +38,10 @@ type HDDTGDTConfig struct {
 	Timeout              time.Duration
 	MaxQueryDays         int
 	MaxExportDays        int
+	MinRequestInterval   time.Duration
+	RateLimitRetries     int
+	RateLimitBaseDelay   time.Duration
+	QueryCacheTTL        time.Duration
 	SessionSkew          time.Duration
 	SessionStorePath     string
 	SessionEncryptionKey []byte
@@ -56,6 +60,22 @@ func (c HDDTGDTConfig) Validate() error {
 
 	if c.MaxExportDays <= 0 {
 		return fmt.Errorf("EIF_HDDT_GDT_MAX_EXPORT_DAYS must be > 0")
+	}
+
+	if c.MinRequestInterval < 0 {
+		return fmt.Errorf("EIF_HDDT_GDT_MIN_REQUEST_INTERVAL must be >= 0")
+	}
+
+	if c.RateLimitRetries < 0 {
+		return fmt.Errorf("EIF_HDDT_GDT_RATE_LIMIT_RETRIES must be >= 0")
+	}
+
+	if c.RateLimitBaseDelay < 0 {
+		return fmt.Errorf("EIF_HDDT_GDT_RATE_LIMIT_BASE_DELAY must be >= 0")
+	}
+
+	if c.QueryCacheTTL < 0 {
+		return fmt.Errorf("EIF_HDDT_GDT_QUERY_CACHE_TTL must be >= 0")
 	}
 
 	if c.SessionStorePath == "" {

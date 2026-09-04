@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/yunotools/eif/internal/core/apperr"
 	corehttp "github.com/yunotools/eif/internal/core/protocol/httpclient"
@@ -12,10 +13,14 @@ import (
 )
 
 type service struct {
-	client        client.Client
-	sessions      *session.Manager
-	maxQueryDays  int
-	maxExportDays int
+	client             client.Client
+	sessions           *session.Manager
+	maxQueryDays       int
+	maxExportDays      int
+	upstreamLimiter    *upstreamLimiter
+	rateLimitRetries   int
+	rateLimitBaseDelay time.Duration
+	queryCache         *invoiceQueryCache
 }
 
 func New(
@@ -23,12 +28,20 @@ func New(
 	sessions *session.Manager,
 	maxQueryDays,
 	maxExportDays int,
+	minRequestInterval time.Duration,
+	rateLimitRetries int,
+	rateLimitBaseDelay time.Duration,
+	queryCacheTTL time.Duration,
 ) Service {
 	return &service{
-		client:        client,
-		sessions:      sessions,
-		maxQueryDays:  maxQueryDays,
-		maxExportDays: maxExportDays,
+		client:             client,
+		sessions:           sessions,
+		maxQueryDays:       maxQueryDays,
+		maxExportDays:      maxExportDays,
+		upstreamLimiter:    newUpstreamLimiter(minRequestInterval),
+		rateLimitRetries:   rateLimitRetries,
+		rateLimitBaseDelay: rateLimitBaseDelay,
+		queryCache:         newInvoiceQueryCache(queryCacheTTL),
 	}
 }
 
@@ -67,6 +80,9 @@ func (s *service) mapToAppError(err error) error {
 		if httpErr.StatusCode == http.StatusUnauthorized ||
 			httpErr.StatusCode == http.StatusForbidden {
 			return apperr.New(apperr.CodeSessionExpired, err)
+		}
+		if httpErr.StatusCode == http.StatusTooManyRequests {
+			return apperr.New(apperr.CodeHDDTGDTRateLimited, err)
 		}
 		return apperr.New(apperr.CodeHDDTGDTBadGateway, err)
 	}

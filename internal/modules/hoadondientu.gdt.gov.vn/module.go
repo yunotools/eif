@@ -39,7 +39,16 @@ func New(
 		"store_path", cfg.SessionStorePath,
 	)
 
-	svc := service.New(upstreamClient, sessionManager, cfg.MaxQueryDays, cfg.MaxExportDays)
+	svc := service.New(
+		upstreamClient,
+		sessionManager,
+		cfg.MaxQueryDays,
+		cfg.MaxExportDays,
+		cfg.MinRequestInterval,
+		cfg.RateLimitRetries,
+		cfg.RateLimitBaseDelay,
+		cfg.QueryCacheTTL,
+	)
 	return &Module{
 		handler: handler.New(svc),
 	}, nil
@@ -59,4 +68,9 @@ func (m *Module) RegisterRoutes(api *gin.RouterGroup) {
 	group.POST("/invoice/sco/purchase", m.handler.QueryScoInvoicePurchase)
 	group.POST("/invoice/export", m.handler.ExportInvoice)
 	group.POST("/invoice/export/merged", m.handler.ExportInvoiceMerged)
+
+	group.POST("/invoice/wrapper/sold", m.handler.QueryInvoiceSoldWrapper)
+	group.POST("/invoice/wrapper/purchase", m.handler.QueryInvoicePurchaseWrapper)
+	group.POST("/invoice/wrapper/sold/export", m.handler.ExportInvoiceSoldWrapper)
+	group.POST("/invoice/wrapper/purchase/export", m.handler.ExportInvoicePurchaseWrapper)
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -22,6 +23,7 @@ type HTTPError struct {
 	StatusCode int
 	Status     string
 	Body       string
+	RetryAfter time.Duration
 }
 
 func (e *HTTPError) Error() string {
@@ -219,5 +221,25 @@ func readHTTPError(resp *http.Response) error {
 		StatusCode: resp.StatusCode,
 		Status:     resp.Status,
 		Body:       strings.TrimSpace(string(data)),
+		RetryAfter: parseRetryAfter(resp.Header.Get("Retry-After")),
 	}
+}
+
+func parseRetryAfter(value string) time.Duration {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0
+	}
+
+	if seconds, err := strconv.Atoi(value); err == nil && seconds > 0 {
+		return time.Duration(seconds) * time.Second
+	}
+
+	if retryAt, err := http.ParseTime(value); err == nil {
+		if delay := time.Until(retryAt); delay > 0 {
+			return delay
+		}
+	}
+
+	return 0
 }

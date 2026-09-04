@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+const MaxInvoiceQuerySize = 50
+
 type InvoiceChannel string
 
 const (
@@ -49,6 +51,15 @@ type InvoiceQueryFailedRange struct {
 	ToDate   string `json:"to_date"`
 }
 
+type InvoicePagination struct {
+	Page        int  `json:"page"`
+	PageSize    int  `json:"page_size"`
+	TotalPages  int  `json:"total_pages"`
+	HasPrevious bool `json:"has_previous"`
+	HasNext     bool `json:"has_next"`
+	Truncated   bool `json:"truncated"`
+}
+
 type InvoiceQueryResult struct {
 	FromDate     string                    `json:"from_date"`
 	ToDate       string                    `json:"to_date"`
@@ -57,6 +68,7 @@ type InvoiceQueryResult struct {
 	Total        int                       `json:"total"`
 	State        any                       `json:"state"`
 	Time         int                       `json:"time"`
+	Pagination   *InvoicePagination        `json:"pagination,omitempty"`
 }
 
 type File struct {

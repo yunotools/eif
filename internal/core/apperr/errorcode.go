@@ -57,6 +57,12 @@ var (
 		Message:    "HDDT GDT request failed",
 	}
 
+	CodeHDDTGDTRateLimited = ErrorCode{
+		Code:       "EIF-HDDT-GDT-RATE-LIMIT-429",
+		StatusCode: http.StatusTooManyRequests,
+		Message:    "HDDT GDT rate limit exceeded",
+	}
+
 	CodeHDDTGDTInvalidResponse = ErrorCode{
 		Code:       "EIF-HDDT-GDT-INVALID-502",
 		StatusCode: http.StatusBadGateway,

@@ -26,6 +26,14 @@ func (h *Handler) QueryScoInvoicePurchase(c *gin.Context) {
 	h.query(c, h.service.QueryScoInvoicePurchase)
 }
 
+func (h *Handler) QueryInvoiceSoldWrapper(c *gin.Context) {
+	h.query(c, h.service.QueryInvoiceSoldWrapper)
+}
+
+func (h *Handler) QueryInvoicePurchaseWrapper(c *gin.Context) {
+	h.query(c, h.service.QueryInvoicePurchaseWrapper)
+}
+
 func (h *Handler) query(c *gin.Context, fn func(context.Context, string, *dto.HoaDonQuery) (*model.InvoiceQueryResult, error)) {
 	var req dto.HoaDonQuery
 	if err := c.ShouldBindJSON(&req); err != nil {

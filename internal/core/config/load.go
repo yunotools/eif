@@ -25,6 +25,11 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	rateLimitRetries, err := envInt("EIF_HDDT_GDT_RATE_LIMIT_RETRIES", 4)
+	if err != nil {
+		return nil, err
+	}
+
 	sessionEncryptionKey, err := envBase64Bytes("EIF_SESSION_ENCRYPTION_KEY", 32)
 	if err != nil {
 		return nil, err
@@ -52,6 +57,10 @@ func Load() (*Config, error) {
 			Timeout:              envDuration("EIF_HDDT_GDT_TIMEOUT", 60*time.Second),
 			MaxQueryDays:         maxQueryDays,
 			MaxExportDays:        maxExportDays,
+			MinRequestInterval:   envDuration("EIF_HDDT_GDT_MIN_REQUEST_INTERVAL", 500*time.Millisecond),
+			RateLimitRetries:     rateLimitRetries,
+			RateLimitBaseDelay:   envDuration("EIF_HDDT_GDT_RATE_LIMIT_BASE_DELAY", time.Second),
+			QueryCacheTTL:        envDuration("EIF_HDDT_GDT_QUERY_CACHE_TTL", 45*time.Second),
 			SessionSkew:          envDuration("EIF_SESSION_EXPIRY_SKEW", 30*time.Second),
 			SessionStorePath:     envString("EIF_SESSION_STORE_PATH", "./runtime/hddtgdt-sessions.enc"),
 			SessionEncryptionKey: sessionEncryptionKey,

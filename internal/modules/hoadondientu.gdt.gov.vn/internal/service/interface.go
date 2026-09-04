@@ -73,6 +73,24 @@ type Service interface {
 		error,
 	)
 
+	QueryInvoiceSoldWrapper(
+		ctx context.Context,
+		sessionID string,
+		query *dto.HoaDonQuery,
+	) (
+		*model.InvoiceQueryResult,
+		error,
+	)
+
+	QueryInvoicePurchaseWrapper(
+		ctx context.Context,
+		sessionID string,
+		query *dto.HoaDonQuery,
+	) (
+		*model.InvoiceQueryResult,
+		error,
+	)
+
 	ExportInvoice(
 		ctx context.Context,
 		sessionID string,
@@ -86,6 +104,24 @@ type Service interface {
 		ctx context.Context,
 		sessionID string,
 		req *dto.ExportInvoiceMergedRequest,
+	) (
+		*model.File,
+		error,
+	)
+
+	ExportInvoiceSoldWrapper(
+		ctx context.Context,
+		sessionID string,
+		req *dto.ExportInvoiceWrapperRequest,
+	) (
+		*model.File,
+		error,
+	)
+
+	ExportInvoicePurchaseWrapper(
+		ctx context.Context,
+		sessionID string,
+		req *dto.ExportInvoiceWrapperRequest,
 	) (
 		*model.File,
 		error,

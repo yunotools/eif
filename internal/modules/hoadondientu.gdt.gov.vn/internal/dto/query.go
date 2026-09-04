@@ -16,5 +16,6 @@ type HoaDonQuery struct {
 	InvoiceFilter
 	FromDate string `json:"from_date"`
 	ToDate   string `json:"to_date"`
+	Page     int    `json:"page,omitempty"`
 	Size     int    `json:"size,omitempty"`
 }

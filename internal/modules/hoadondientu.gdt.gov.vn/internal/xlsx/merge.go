@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 /*
@@ -198,6 +199,220 @@ type mergeWorkbook struct {
 	HeaderRow     int
 	STTColumn     string
 	Header        map[string]string
+}
+
+// MergeSource mô tả một workbook nguồn khi cần gộp các file có schema khác nhau.
+// Name được ghi vào cột "Nguồn dữ liệu" của file kết quả.
+type MergeSource struct {
+	Name string
+	Body []byte
+}
+
+type mergeUnionColumn struct {
+	Key    string
+	Header string
+}
+
+type mergeWorkbookColumn struct {
+	Column string
+	Key    string
+	Header string
+}
+
+// MergeByHeader gộp các workbook có thể có header/schema khác nhau.
+//
+// Merge() vẫn nên là lựa chọn đầu tiên vì giữ nguyên template/style của GDT khi
+// mọi workbook có cùng schema. MergeByHeader là fallback an toàn cho wrapper
+// Standard + SCO: dữ liệu được căn theo tên header thay vì vị trí cột, tránh
+// trường hợp bỏ validation rồi ghép nhầm cột.
+func MergeByHeader(sources []MergeSource, title string) ([]byte, error) {
+	if len(sources) == 0 {
+		return nil, fmt.Errorf("xlsx merge sources are required")
+	}
+
+	workbooks := make([]*mergeWorkbook, 0, len(sources))
+	workbookColumns := make([][]mergeWorkbookColumn, 0, len(sources))
+
+	columns := []mergeUnionColumn{
+		{Key: "__eif_stt", Header: "STT"},
+		{Key: "__eif_source", Header: "Nguồn dữ liệu"},
+	}
+	seen := map[string]struct{}{
+		"__eif_stt":    {},
+		"__eif_source": {},
+	}
+
+	for sourceIndex, source := range sources {
+		workbook, err := readMergeWorkbook(source.Body)
+		if err != nil {
+			return nil, fmt.Errorf("read xlsx source %d: %w", sourceIndex, err)
+		}
+
+		descriptors := mergeWorkbookHeaderColumns(workbook, sourceIndex)
+		if len(descriptors) == 0 {
+			return nil, fmt.Errorf("xlsx source %d does not contain usable headers", sourceIndex)
+		}
+
+		workbooks = append(workbooks, workbook)
+		workbookColumns = append(workbookColumns, descriptors)
+		for _, descriptor := range descriptors {
+			if descriptor.Key == "__eif_stt" {
+				continue
+			}
+			if _, ok := seen[descriptor.Key]; ok {
+				continue
+			}
+			seen[descriptor.Key] = struct{}{}
+			columns = append(columns, mergeUnionColumn{
+				Key:    descriptor.Key,
+				Header: descriptor.Header,
+			})
+		}
+	}
+
+	rows := make([][]any, 0)
+	sequence := 0
+	for sourceIndex, workbook := range workbooks {
+		sourceName := strings.TrimSpace(sources[sourceIndex].Name)
+		if sourceName == "" {
+			sourceName = fmt.Sprintf("Nguồn %d", sourceIndex+1)
+		}
+
+		byColumn := make(map[string]mergeWorkbookColumn, len(workbookColumns[sourceIndex]))
+		for _, descriptor := range workbookColumns[sourceIndex] {
+			byColumn[descriptor.Column] = descriptor
+		}
+
+		for rowIndex := workbook.HeaderIndex + 1; rowIndex < len(workbook.Rows); rowIndex++ {
+			sourceRow := workbook.Rows[rowIndex]
+			if !isMergeRowHasValue(sourceRow, workbook.SharedStrings) {
+				continue
+			}
+
+			values := make(map[string]string, len(sourceRow.Cells))
+			hasBusinessValue := false
+			for _, cell := range sourceRow.Cells {
+				descriptor, ok := byColumn[getMergeCellColumn(cell.Ref)]
+				if !ok || descriptor.Key == "__eif_stt" {
+					continue
+				}
+				value := getMergeCellText(cell, workbook.SharedStrings)
+				values[descriptor.Key] = value
+				if strings.TrimSpace(value) != "" {
+					hasBusinessValue = true
+				}
+			}
+
+			// Bỏ các dòng rỗng/chỉ có STT. Existing Merge cũng chỉ giữ dòng có
+			// dữ liệu; fallback này tránh tạo dòng trắng khi template có footer.
+			if !hasBusinessValue {
+				continue
+			}
+
+			sequence++
+			output := make([]any, len(columns))
+			output[0] = sequence
+			output[1] = sourceName
+			for columnIndex := 2; columnIndex < len(columns); columnIndex++ {
+				output[columnIndex] = values[columns[columnIndex].Key]
+			}
+			rows = append(rows, output)
+		}
+	}
+
+	tableColumns := make([]Column, 0, len(columns))
+	for index, column := range columns {
+		width := float64(utf8.RuneCountInString(column.Header) + 4)
+		if width < 12 {
+			width = 12
+		}
+		if width > 42 {
+			width = 42
+		}
+		number := false
+		if index == 0 {
+			width = 8
+			number = true
+		} else if index == 1 {
+			width = 20
+		}
+		tableColumns = append(tableColumns, Column{
+			Header: column.Header,
+			Width:  width,
+			Number: number,
+		})
+	}
+
+	if strings.TrimSpace(title) == "" {
+		title = "Hóa đơn điện tử"
+	}
+
+	return BuildTable(Table{
+		Title:   title,
+		Sheet:   "Hóa đơn điện tử",
+		Columns: tableColumns,
+		Rows:    rows,
+	})
+}
+
+func mergeWorkbookHeaderColumns(workbook *mergeWorkbook, sourceIndex int) []mergeWorkbookColumn {
+	if workbook == nil {
+		return nil
+	}
+
+	columns := make([]string, 0, len(workbook.Header))
+	for column := range workbook.Header {
+		columns = append(columns, column)
+	}
+	sort.SliceStable(columns, func(i, j int) bool {
+		return getMergeColumnNumber(columns[i]) < getMergeColumnNumber(columns[j])
+	})
+
+	occurrences := make(map[string]int)
+	result := make([]mergeWorkbookColumn, 0, len(columns))
+	for _, column := range columns {
+		header := strings.TrimSpace(workbook.Header[column])
+		if strings.EqualFold(header, "STT") {
+			result = append(result, mergeWorkbookColumn{
+				Column: column,
+				Key:    "__eif_stt",
+				Header: "STT",
+			})
+			continue
+		}
+
+		// Header rỗng không thể map an toàn giữa Standard và SCO. Nếu giữ lại,
+		// tách theo source + column để tuyệt đối không đẩy dữ liệu sang nhầm cột.
+		if header == "" {
+			result = append(result, mergeWorkbookColumn{
+				Column: column,
+				Key:    fmt.Sprintf("__blank_%d_%s", sourceIndex, column),
+				Header: fmt.Sprintf("Cột %s", column),
+			})
+			continue
+		}
+
+		base := normalizeMergeHeaderKey(header)
+		occurrences[base]++
+		key := fmt.Sprintf("%s#%d", base, occurrences[base])
+		result = append(result, mergeWorkbookColumn{
+			Column: column,
+			Key:    key,
+			Header: header,
+		})
+	}
+	return result
+}
+
+func normalizeMergeHeaderKey(value string) string {
+	return strings.ToLower(strings.Join(strings.Fields(value), " "))
+}
+
+// Validate kiểm tra payload có phải workbook XLSX mà EIF có thể đọc/merge hay không.
+// Hàm không ghi nội dung file ra log để tránh rò dữ liệu hóa đơn.
+func Validate(body []byte) error {
+	_, err := readMergeWorkbook(body)
+	return err
 }
 
 // Merge nhận nhiều file làm đầu vào -> merge lại -> trả ra thành 1 file duy nhất

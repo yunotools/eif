@@ -40,8 +40,9 @@ func (c *hddtgdtClient) QueryInvoices(
 	if size <= 0 {
 		size = 15
 	}
-	if size > 5000 {
-		size = 5000
+
+	if size > model.MaxInvoiceQuerySize {
+		size = model.MaxInvoiceQuerySize
 	}
 
 	params := url.Values{}
