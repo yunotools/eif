@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/yunotools/eif/internal/core/buildinfo"
 	"github.com/yunotools/eif/internal/core/config"
 	"github.com/yunotools/eif/internal/core/logger"
 	coremodule "github.com/yunotools/eif/internal/core/module"
@@ -19,6 +21,14 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "--version", "version":
+			fmt.Println(buildinfo.String())
+			return
+		}
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		slog.Error("load config", "error", err)

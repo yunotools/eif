@@ -1,0 +1,203 @@
+name: Backend CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOVULNCHECK_VERSION: "v1.7.0"
+  TRIVY_VERSION: "v0.74.0"
+
+jobs:
+  quality:
+    name: Quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Toolchain
+        run: go version
+
+      - name: Format check
+        run: make fmt-check
+
+      - name: Module check
+        run: make mod-check
+
+      - name: Lint
+        run: make lint
+
+      - name: Typecheck
+        run: make typecheck
+
+      - name: Test
+        run: make test
+
+  security-source:
+    name: Source security
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install govulncheck
+        run: go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+
+      - name: Setup Trivy
+        uses: aquasecurity/setup-trivy@e07451d2e059ed86c2870430ea286b3a9e0bf241
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          cache: true
+
+      - name: Trivy source scan
+        run: ./scripts/ci/trivy-source.sh dist/security/source
+
+      - name: Go vulnerability scan
+        run: ./scripts/ci/govulncheck.sh dist/security/source
+
+      - name: Upload source security reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-security-${{ github.sha }}-${{ github.run_attempt }}
+          path: dist/security/source/
+          if-no-files-found: warn
+          retention-days: 30
+
+  build-image:
+    name: Build + image scan
+    needs: [quality, security-source]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Production build check
+        run: make build
+
+      - name: Build backend CI image
+        env:
+          IMAGE: eif-backend:ci-${{ github.sha }}
+        run: |
+          DOCKER_BUILDKIT=1 docker build \
+            --build-arg EIF_VERSION="ci-${GITHUB_SHA}" \
+            --build-arg EIF_BACKEND_COMMIT="${GITHUB_SHA}" \
+            --build-arg EIF_SOURCE_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            -t "${IMAGE}" \
+            .
+
+      - name: Setup Trivy
+        uses: aquasecurity/setup-trivy@e07451d2e059ed86c2870430ea286b3a9e0bf241
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          cache: true
+
+      - name: Trivy image scan
+        run: ./scripts/ci/trivy-image.sh "eif-backend:ci-${GITHUB_SHA}" dist/security/image
+
+      - name: Upload image security reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-image-security-${{ github.sha }}-${{ github.run_attempt }}
+          path: dist/security/image/
+          if-no-files-found: warn
+          retention-days: 30
+
+  receipt:
+    name: CI receipt
+    needs: [quality, security-source, build-image]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download source security artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: backend-security-${{ github.sha }}-${{ github.run_attempt }}
+          path: dist/inputs/source-security
+
+      - name: Download image security artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: backend-image-security-${{ github.sha }}-${{ github.run_attempt }}
+          path: dist/inputs/image-security
+
+      - name: Generate CI receipt
+        run: ./scripts/ci/create-receipt.sh
+
+      - name: Upload CI receipt
+        uses: actions/upload-artifact@v7
+        with:
+          name: eif-backend-ci-${{ github.sha }}-${{ github.run_attempt }}
+          path: dist/ci/
+          if-no-files-found: error
+          retention-days: 30
+
+  notify-eif-ci:
+    name: Notify release orchestrator
+    needs: receipt
+    if: >
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Create GitHub App token for eif-ci
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.EIF_GITHUB_APP_CLIENT_ID }}
+          private-key: ${{ secrets.EIF_GITHUB_APP_PRIVATE_KEY }}
+          owner: ${{ vars.EIF_GITHUB_OWNER }}
+          repositories: ${{ vars.EIF_CI_REPO }}
+          permission-contents: write
+
+      - name: Dispatch backend candidate
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          EIF_GITHUB_OWNER: ${{ vars.EIF_GITHUB_OWNER }}
+          EIF_CI_REPO: ${{ vars.EIF_CI_REPO }}
+        run: ./scripts/ci/dispatch-candidate.sh

@@ -1,15 +1,19 @@
 package router
 
 import (
+	"io/fs"
+	"mime"
 	"net/http"
 	"os"
+	pathpkg "path"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
-func staticFallback(staticDir string) gin.HandlerFunc {
+func staticFallback(staticDir string, embedded fs.FS) gin.HandlerFunc {
 	root, _ := filepath.Abs(staticDir)
 
 	return func(c *gin.Context) {
@@ -19,38 +23,24 @@ func staticFallback(staticDir string) gin.HandlerFunc {
 			return
 		}
 
-		if strings.HasPrefix(
-			c.Request.URL.Path,
-			"/api/",
-		) {
+		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
 			c.Status(http.StatusNotFound)
 			return
 		}
 
-		path := strings.TrimPrefix(
-			filepath.Clean("/"+c.Request.URL.Path),
-			string(filepath.Separator),
+		requestPath := strings.TrimPrefix(
+			pathpkg.Clean("/"+c.Request.URL.Path),
+			"/",
 		)
-
-		candidates := []string{
-			filepath.Join(root, path),
-			filepath.Join(root, path, "index.html"),
+		if requestPath == "." {
+			requestPath = ""
 		}
 
-		if filepath.Ext(path) == "" && path != "" {
-			candidates = append(
-				candidates,
-				filepath.Join(root, path+".html"),
-			)
-		}
-		if path == "" || path == "." {
-			candidates = append([]string{
-				filepath.Join(root, "index.html")},
-				candidates...,
-			)
-		}
+		candidates := staticCandidates(requestPath)
 
-		for _, candidate := range candidates {
+		// Disk first: useful for local development and explicit overrides.
+		for _, name := range candidates {
+			candidate := filepath.Join(root, filepath.FromSlash(name))
 			candidateAbs, err := filepath.Abs(candidate)
 			if err != nil || !inRoot(root, candidateAbs) {
 				continue
@@ -62,9 +52,22 @@ func staticFallback(staticDir string) gin.HandlerFunc {
 			}
 		}
 
-		index := filepath.Join(root, "index.html")
-		if info, err := os.Stat(index); err == nil && !info.IsDir() {
-			c.File(index)
+		// Release binary fallback: serves the Next.js static export compiled by
+		// go:embed. This makes eif / eif.exe runnable without a web/static folder.
+		for _, name := range candidates {
+			if serveEmbedded(c, embedded, name) {
+				return
+			}
+		}
+
+		// Keep the previous SPA-style fallback behavior.
+		if index := filepath.Join(root, "index.html"); inRoot(root, index) {
+			if info, err := os.Stat(index); err == nil && !info.IsDir() {
+				c.File(index)
+				return
+			}
+		}
+		if serveEmbedded(c, embedded, "index.html") {
 			return
 		}
 
@@ -72,16 +75,52 @@ func staticFallback(staticDir string) gin.HandlerFunc {
 	}
 }
 
-// Đảm bảo: candidate phải nằm trong /app/web/static
-// Chống Path traversal
+func staticCandidates(requestPath string) []string {
+	if requestPath == "" {
+		return []string{"index.html"}
+	}
+
+	candidates := []string{
+		requestPath,
+		pathpkg.Join(requestPath, "index.html"),
+	}
+	if pathpkg.Ext(requestPath) == "" {
+		candidates = append(candidates, requestPath+".html")
+	}
+	return candidates
+}
+
+func serveEmbedded(c *gin.Context, root fs.FS, name string) bool {
+	if strings.TrimSpace(name) == "" {
+		return false
+	}
+
+	data, err := fs.ReadFile(root, name)
+	if err != nil {
+		return false
+	}
+
+	contentType := mime.TypeByExtension(pathpkg.Ext(name))
+	if contentType == "" {
+		contentType = http.DetectContentType(data)
+	}
+
+	c.Header("Content-Type", contentType)
+	c.Header("Content-Length", strconv.Itoa(len(data)))
+	if c.Request.Method == http.MethodHead {
+		c.Status(http.StatusOK)
+		return true
+	}
+	c.Data(http.StatusOK, contentType, data)
+	return true
+}
+
+// inRoot prevents path traversal when an on-disk static directory is used.
 func inRoot(root, candidate string) bool {
 	rel, err := filepath.Rel(root, candidate)
 	if err != nil {
 		return false
 	}
 	return rel != ".." &&
-		!strings.HasPrefix(
-			rel,
-			".."+string(filepath.Separator),
-		)
+		!strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
